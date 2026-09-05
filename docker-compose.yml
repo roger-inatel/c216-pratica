@@ -1,0 +1,52 @@
+name: c216-pratica
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: c216-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-c216}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-c216}
+      POSTGRES_DB: ${POSTGRES_DB:-c216}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-c216} -d ${POSTGRES_DB:-c216}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - c216-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: c216-backend
+    restart: unless-stopped
+    # Só sobe depois que o Postgres responde ao pg_isready, e nao apenas
+    # depois que o container do banco existe.
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - c216-net
+
+volumes:
+  pgdata:
+
+networks:
+  c216-net:
+    driver: bridge
