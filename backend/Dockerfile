@@ -15,7 +15,7 @@ WORKDIR /app
 # enquanto as dependencias nao mudarem, esta etapa nao e refeita.
 COPY pyproject.toml poetry.lock ./
 
-RUN poetry install --only main --no-root
+RUN poetry install --only main
 
 # ---------- Estagio 2: runtime ----------
 FROM python:3.11-slim AS runtime
@@ -26,13 +26,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Usuario criado antes das copias para que o proprio COPY ja grave o dono correto.
+# Um "chown -R" depois das copias reescreveria os metadados de cada arquivo e
+# gravaria o virtualenv inteiro numa segunda camada, dobrando o peso dele na imagem.
+RUN useradd --create-home --uid 1000 appuser && chown appuser:appuser /app
+
 # Traz apenas o virtualenv pronto. O Poetry e o cache de build ficam para tras.
-COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 
-COPY app ./app
+COPY --chown=appuser:appuser app ./app
 
-# Executar como usuario sem privilegios
-RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
