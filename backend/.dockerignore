@@ -1,0 +1,29 @@
+# Ambiente virtual local - a imagem instala as dependencias do zero
+.venv/
+venv/
+
+# Artefatos do Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Caches de ferramentas
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Controle de versao e editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Nao faz sentido copiar para dentro da propria imagem
+Dockerfile
+.dockerignore
+
+# Variaveis de ambiente nunca entram na imagem
+.env
+.env.*
