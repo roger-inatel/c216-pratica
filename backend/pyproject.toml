@@ -1,12 +1,12 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Backend da pratica 1 - C216"
+description = "Backend do repositorio de praticas da disciplina C216"
 authors = [
     {name = "Roger Pereira Freitas",email = "freitasroger169@gmail.com"}
 ]
 readme = "README.md"
-requires-python = "^3.11"
+requires-python = ">=3.11,<4.0"
 dependencies = [
     "fastapi (>=0.141.1,<0.142.0)",
     "uvicorn[standard] (>=0.52.4,<0.53.0)"
@@ -17,7 +17,22 @@ dependencies = [
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry]
+# O projeto e uma aplicacao executada a partir de app/, nao uma biblioteca instalavel.
+# Sem esta linha o "poetry install" tenta empacotar um modulo chamado "backend",
+# que nao existe, e termina com erro.
+package-mode = false
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.1.1"
 ruff = "^0.16.4"
+# Requerido pelo TestClient do FastAPI, usado em tests/.
+httpx2 = "^2.12.0"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# package-mode = false nao instala o projeto no venv, entao o app/ entra pelo path.
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
