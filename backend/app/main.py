@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="C216 - Pratica 1")
+app = FastAPI(title="C216 - Sistemas Distribuidos")
 
 
 @app.get("/")
