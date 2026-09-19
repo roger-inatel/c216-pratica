@@ -8,6 +8,7 @@ Repositorio das praticas da disciplina C216 - Sistemas Distribuidos (Inatel).
 - `docker-compose.yml` - sobe a API junto com o banco de dados
 - `Makefile` - centraliza os comandos do projeto
 - `.env.example` - modelo das variaveis de ambiente; o compose tem padrao para todas, entao o projeto sobe sem `.env`
+- `.github/workflows/ci-backend.yml` - CI do backend (testes e lint)
 
 ## Pre-requisitos
 
@@ -33,6 +34,35 @@ make docker-up   # sobe a API e o banco em containers
 ```
 
 Detalhes do backend em [backend/README.md](backend/README.md).
+
+## Testes
+
+```bash
+make test               # todos os testes
+make test-verbose       # lista cada teste
+make test-unit          # so os unitarios
+make test-integration   # so os de integracao
+```
+
+Sem o Makefile, dentro de `backend/`: `poetry run pytest`.
+
+Os testes rodam localmente e no CI. Eles nao rodam dentro do container, porque a imagem
+Docker so instala as dependencias de producao. A organizacao dos testes esta no
+[README do backend](backend/README.md#testes).
+
+## Integracao continua
+
+O `.github/workflows/ci-backend.yml` roda em todo push e pull request, com dois jobs:
+`Pytest` e `Ruff (Lint & Format)`. O merge em `aulas` e `main` exige os dois passando e uma
+aprovacao.
+
+Para rodar localmente o mesmo que o CI:
+
+```bash
+make format-check
+make lint
+make test-verbose
+```
 
 ## Branches
 

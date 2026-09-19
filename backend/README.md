@@ -46,4 +46,8 @@ make docker-down   # derruba tudo
 
 ## Testes
 
-Os testes ficam em `tests/` e cobrem as duas rotas acima.
+- `tests/unit/` - testes unitarios, sem HTTP: funcoes das rotas e rotas declaradas
+- `tests/integration/` - testes de integracao com o `TestClient`: respostas 200, 404 e 405
+- `tests/conftest.py` - fixture `client`, usada nos testes de integracao
+
+Como rodar: [README da raiz](../README.md#testes).
