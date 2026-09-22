@@ -18,7 +18,8 @@ DB_SERVICE := db
 POSTGRES_USER ?= c216
 POSTGRES_DB ?= c216
 
-.PHONY: help install run test lint format clean \
+.PHONY: help install run test test-verbose test-unit test-integration \
+        lint format format-check clean \
         docker-build docker-up docker-down docker-logs docker-ps \
         docker-shell docker-rebuild db-shell
 
@@ -27,23 +28,29 @@ POSTGRES_DB ?= c216
 # define preserva o texto exato nos dois.
 define TEXTO_AJUDA
 Ambiente local (Poetry):
-  make help           - lista os comandos disponiveis
-  make install        - instala as dependencias do backend com Poetry
-  make run            - inicia o servidor FastAPI (uvicorn) em modo dev
-  make test           - roda a suite de testes com pytest
-  make lint           - verifica o codigo com o linter
-  make format         - formata o codigo automaticamente
-  make clean          - remove caches e arquivos temporarios
+  make help             - lista os comandos disponiveis
+  make install          - instala as dependencias do backend com Poetry
+  make run              - inicia o servidor FastAPI (uvicorn) em modo dev
+  make lint             - verifica o codigo com o linter
+  make format           - formata o codigo automaticamente
+  make format-check     - confere a formatacao sem alterar arquivos (como no CI)
+  make clean            - remove caches e arquivos temporarios
+
+Testes (pytest):
+  make test             - roda todos os testes
+  make test-verbose     - roda todos os testes, listando cada um
+  make test-unit        - roda so os testes unitarios (sem HTTP)
+  make test-integration - roda so os testes de integracao (TestClient)
 
 Containers (Docker Compose):
-  make docker-build   - constroi a imagem do backend
-  make docker-up      - sobe backend e banco em segundo plano
-  make docker-down    - derruba os servicos e remove a rede
-  make docker-logs    - acompanha os logs do backend em tempo real
-  make docker-ps      - mostra o status dos servicos
-  make docker-shell   - abre um shell dentro do container do backend
-  make docker-rebuild - reconstroi as imagens do zero e sobe de novo
-  make db-shell       - abre o psql no banco de dados
+  make docker-build     - constroi a imagem do backend
+  make docker-up        - sobe backend e banco em segundo plano
+  make docker-down      - derruba os servicos e remove a rede
+  make docker-logs      - acompanha os logs do backend em tempo real
+  make docker-ps        - mostra o status dos servicos
+  make docker-shell     - abre um shell dentro do container do backend
+  make docker-rebuild   - reconstroi as imagens do zero e sobe de novo
+  make db-shell         - abre o psql no banco de dados
 endef
 export TEXTO_AJUDA
 
@@ -59,11 +66,23 @@ run:
 test:
 	cd $(BACKEND_DIR) && $(POETRY) run pytest
 
+test-verbose:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest -v
+
+test-unit:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest tests/unit
+
+test-integration:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest tests/integration
+
 lint:
 	cd $(BACKEND_DIR) && $(POETRY) run ruff check .
 
 format:
 	cd $(BACKEND_DIR) && $(POETRY) run ruff format .
+
+format-check:
+	cd $(BACKEND_DIR) && $(POETRY) run ruff format --check .
 
 # O find do Unix nao existe no Windows fora do Git Bash: no cmd.exe o nome resolve
 # para o FIND.EXE do sistema, que busca texto e falha. O Python ja e pre-requisito

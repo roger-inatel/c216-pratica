@@ -33,6 +33,7 @@ httpx2 = "^2.12.0"
 testpaths = ["tests"]
 # package-mode = false nao instala o projeto no venv, entao o app/ entra pelo path.
 pythonpath = ["."]
+addopts = "--import-mode=importlib"
 
 [tool.ruff]
 line-length = 100

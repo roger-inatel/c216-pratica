@@ -1,0 +1,77 @@
+name: CI - Backend
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# Os nomes dos jobs sao os checks exigidos pelo ruleset das branches aulas e main.
+jobs:
+  lint-and-format:
+    name: Ruff (Lint & Format)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v5
+
+      # Antes do setup-python, que usa o Poetry para montar o cache.
+      - name: Instalar Poetry
+        run: pipx install poetry==2.1.4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: poetry
+          cache-dependency-path: backend/poetry.lock
+
+      - name: Instalar dependencias com Poetry
+        run: poetry install
+
+      - name: Conferir formatacao
+        run: poetry run ruff format --check .
+
+      - name: Conferir lint
+        run: poetry run ruff check .
+
+  tests:
+    name: Pytest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v5
+
+      - name: Instalar Poetry
+        run: pipx install poetry==2.1.4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: poetry
+          cache-dependency-path: backend/poetry.lock
+
+      - name: Instalar dependencias com Poetry
+        run: poetry install
+
+      - name: Mostrar versoes
+        run: |
+          poetry --version
+          poetry run python --version
+
+      - name: Executar Pytest
+        run: poetry run pytest -v
