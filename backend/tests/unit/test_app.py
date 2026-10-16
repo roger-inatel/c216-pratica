@@ -1,13 +1,19 @@
 import pytest
-from fastapi.routing import APIRoute
 from starlette.routing import NoMatchFound
 
-from app.main import app, health_check, read_root
+from app.api.routes.system import health_check, read_root
+from app.main import app
 
 
 @pytest.fixture
-def rotas() -> dict[str, APIRoute]:
-    return {rota.path: rota for rota in app.routes if isinstance(rota, APIRoute)}
+def rotas() -> dict[str, set[str]]:
+    # O include_router guarda cada router como um objeto proprio dentro de app.routes,
+    # entao o contrato publico e lido pelo schema OpenAPI, o mesmo que alimenta o /docs.
+    caminhos = app.openapi()["paths"]
+
+    return {
+        caminho: {metodo.upper() for metodo in operacoes} for caminho, operacoes in caminhos.items()
+    }
 
 
 def test_read_root_retorna_status_ok():
@@ -19,12 +25,20 @@ def test_health_check_retorna_status_healthy():
 
 
 def test_aplicacao_expoe_somente_as_rotas_declaradas(rotas):
-    assert set(rotas) == {"/", "/health"}
+    assert set(rotas) == {"/", "/health", "/items", "/items/{item_id}"}
 
 
-@pytest.mark.parametrize("caminho", ["/", "/health"])
-def test_rota_aceita_apenas_get(rotas, caminho):
-    assert rotas[caminho].methods == {"GET"}
+@pytest.mark.parametrize(
+    ("caminho", "metodos"),
+    [
+        ("/", {"GET"}),
+        ("/health", {"GET"}),
+        ("/items", {"GET", "POST"}),
+        ("/items/{item_id}", {"GET", "PUT", "PATCH", "DELETE"}),
+    ],
+)
+def test_rota_expoe_os_metodos_esperados(rotas, caminho, metodos):
+    assert rotas[caminho] == metodos
 
 
 @pytest.mark.parametrize(
@@ -32,10 +46,15 @@ def test_rota_aceita_apenas_get(rotas, caminho):
     [
         ("read_root", "/"),
         ("health_check", "/health"),
+        ("listar_itens", "/items"),
     ],
 )
 def test_nome_da_rota_resolve_para_o_caminho(nome, caminho):
     assert app.url_path_for(nome) == caminho
+
+
+def test_rota_com_path_parameter_resolve_com_o_valor():
+    assert app.url_path_for("buscar_item", item_id=7) == "/items/7"
 
 
 def test_nome_de_rota_inexistente_levanta_erro():

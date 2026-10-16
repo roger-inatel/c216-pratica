@@ -35,6 +35,13 @@ make docker-up   # sobe a API e o banco em containers
 
 Detalhes do backend em [backend/README.md](backend/README.md).
 
+## API
+
+Os endpoints ficam em `backend/app/api/routes`, separados por recurso: `system.py` responde
+`/` e `/health`, e `items.py` expoe o CRUD de itens em `/items`. A lista completa esta no
+[README do backend](backend/README.md#rotas) e a documentacao interativa sobe junto com a
+aplicacao em `http://localhost:8000/docs`.
+
 ## Testes
 
 ```bash
