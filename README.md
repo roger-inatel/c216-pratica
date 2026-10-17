@@ -42,6 +42,26 @@ Os endpoints ficam em `backend/app/api/routes`, separados por recurso: `system.p
 [README do backend](backend/README.md#rotas) e a documentacao interativa sobe junto com a
 aplicacao em `http://localhost:8000/docs`.
 
+## Banco de dados
+
+O PostgreSQL sobe junto com a API pelo `docker-compose.yml`. A aplicacao recebe o endereco do
+banco na variavel `DATABASE_URL`, que o compose monta a partir das variaveis `POSTGRES_*`.
+
+As migrations ficam em `backend/alembic/versions` e sao aplicadas pelo proprio container antes de
+o servidor iniciar, entao `make docker-up` entrega a API com o banco no formato que ela espera.
+
+```bash
+make db-current      # revisao aplicada no banco
+make db-history      # historico de migrations
+make db-upgrade      # aplica as migrations pendentes
+make db-downgrade    # desfaz a ultima migration
+make db-shell        # abre o psql
+make db-migration MSG="cria tabela items"   # gera uma migration a partir dos modelos
+```
+
+A migration e gerada dentro do container, que ja aponta para o banco do compose, e o arquivo
+criado volta para o repositorio.
+
 ## Testes
 
 ```bash
@@ -53,6 +73,10 @@ make test-integration   # so os de integracao
 
 Sem o Makefile, dentro de `backend/`: `poetry run pytest`.
 
+Por padrao a suite usa um SQLite em memoria, entao `make test` roda sem Docker e sem banco
+instalado. Com a variavel `TEST_DATABASE_URL` apontando para um PostgreSQL, os mesmos testes
+rodam contra o banco de verdade - e e assim que eles rodam no CI.
+
 Os testes rodam localmente e no CI. Eles nao rodam dentro do container, porque a imagem
 Docker so instala as dependencias de producao. A organizacao dos testes esta no
 [README do backend](backend/README.md#testes).
@@ -60,8 +84,8 @@ Docker so instala as dependencias de producao. A organizacao dos testes esta no
 ## Integracao continua
 
 O `.github/workflows/ci-backend.yml` roda em todo push e pull request, com dois jobs:
-`Pytest` e `Ruff (Lint & Format)`. O merge em `aulas` e `main` exige os dois passando e uma
-aprovacao.
+`Pytest`, que sobe um PostgreSQL e executa a suite contra ele, e `Ruff (Lint & Format)`.
+O merge em `aulas` e `main` exige os dois passando e uma aprovacao.
 
 Para rodar localmente o mesmo que o CI:
 
