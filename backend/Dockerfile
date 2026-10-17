@@ -34,6 +34,11 @@ RUN useradd --create-home --uid 1000 appuser && chown appuser:appuser /app
 # Traz apenas o virtualenv pronto. O Poetry e o cache de build ficam para tras.
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 
+# O Alembic entra na imagem porque a migration e aplicada na subida do container
+# (ver o command do docker-compose.yml).
+COPY --chown=appuser:appuser alembic.ini ./
+COPY --chown=appuser:appuser alembic ./alembic
+
 COPY --chown=appuser:appuser app ./app
 
 USER appuser

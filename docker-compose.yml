@@ -28,11 +28,18 @@ services:
       dockerfile: Dockerfile
     container_name: c216-backend
     restart: unless-stopped
+    environment:
+      # Dentro da rede do Compose o banco responde pelo nome do servico;
+      # "localhost" aqui seria o proprio container do backend.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-c216}:${POSTGRES_PASSWORD:-c216}@db:5432/${POSTGRES_DB:-c216}
     # Só sobe depois que o Postgres responde ao pg_isready, e nao apenas
     # depois que o container do banco existe.
     depends_on:
       db:
         condition: service_healthy
+    # Aplica as migrations pendentes antes de servir: quem sobe o projeto
+    # encontra a API ja respondendo sobre a estrutura correta.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
