@@ -21,7 +21,7 @@ POSTGRES_DB ?= c216
 .PHONY: help install run test test-verbose test-unit test-integration \
         lint format format-check clean \
         docker-build docker-up docker-down docker-logs docker-ps \
-        docker-shell docker-rebuild db-shell
+        docker-shell docker-rebuild         db-shell db-upgrade db-downgrade db-current db-history db-migration
 
 # O texto vai para o ambiente e e impresso pelo Python. Com @echo, o cmd.exe
 # imprime as aspas junto, e sem aspas o shell POSIX come a indentacao - o
@@ -50,7 +50,14 @@ Containers (Docker Compose):
   make docker-ps        - mostra o status dos servicos
   make docker-shell     - abre um shell dentro do container do backend
   make docker-rebuild   - reconstroi as imagens do zero e sobe de novo
+
+Banco de dados (Alembic, com os containers no ar):
   make db-shell         - abre o psql no banco de dados
+  make db-upgrade       - aplica as migrations pendentes
+  make db-downgrade     - desfaz a ultima migration
+  make db-current       - mostra a revisao aplicada no banco
+  make db-history       - lista o historico de migrations
+  make db-migration MSG="descricao" - gera uma migration a partir dos modelos
 endef
 export TEXTO_AJUDA
 
@@ -116,3 +123,23 @@ docker-rebuild:
 
 db-shell:
 	$(COMPOSE) exec $(DB_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+
+db-upgrade:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic upgrade head
+
+db-downgrade:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic downgrade -1
+
+db-current:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic current
+
+db-history:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic history
+
+# A migration e gerada dentro do container, que ja aponta para o banco do Compose,
+# e o arquivo criado volta para o repositorio. Rodar o Alembic pelo host exigiria
+# que a porta publicada do Postgres estivesse livre na maquina de quem gera.
+db-migration:
+	@$(PYTHON) -c "import sys; sys.exit('uso: make db-migration MSG=descricao') if not '$(MSG)' else None"
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic revision --autogenerate -m "$(MSG)"
+	$(COMPOSE) cp $(BACKEND_SERVICE):/app/alembic/versions/. ./$(BACKEND_DIR)/alembic/versions
