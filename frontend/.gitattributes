@@ -1,0 +1,2 @@
+# O Biome exige LF; sem isso o autocrlf do Windows quebra o format:check no checkout.
+* text=auto eol=lf
