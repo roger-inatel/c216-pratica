@@ -1,4 +1,6 @@
-from app.schemas.item import Item, ItemCreate, ItemUpdate
+from app.models.item import Item
+from app.repositories.item import ItemRepository
+from app.schemas.item import ItemCreate, ItemUpdate
 
 
 class ItemNaoEncontrado(Exception):
@@ -7,48 +9,49 @@ class ItemNaoEncontrado(Exception):
         self.item_id = item_id
 
 
+class ItemJaExiste(Exception):
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Ja existe um item com o nome {name}")
+        self.name = name
+
+
 class ItemService:
-    def __init__(self) -> None:
-        self._itens: dict[int, Item] = {}
-        self._proximo_id = 1
+    def __init__(self, repositorio: ItemRepository) -> None:
+        self._repositorio = repositorio
 
     def listar(self, limit: int) -> list[Item]:
-        return list(self._itens.values())[:limit]
+        return self._repositorio.listar(limit)
 
     def buscar(self, item_id: int) -> Item:
-        if item_id not in self._itens:
+        item = self._repositorio.buscar(item_id)
+        if item is None:
             raise ItemNaoEncontrado(item_id)
 
-        return self._itens[item_id]
+        return item
 
     def criar(self, dados: ItemCreate) -> Item:
-        item = Item(id=self._proximo_id, **dados.model_dump())
-        self._itens[item.id] = item
-        self._proximo_id += 1
+        self._exigir_nome_livre(dados.name)
 
-        return item
+        return self._repositorio.criar(dados.model_dump())
 
     def substituir(self, item_id: int, dados: ItemCreate) -> Item:
-        self.buscar(item_id)
-        item = Item(id=item_id, **dados.model_dump())
-        self._itens[item_id] = item
+        item = self.buscar(item_id)
+        self._exigir_nome_livre(dados.name, item.id)
 
-        return item
+        return self._repositorio.atualizar(item, dados.model_dump())
 
     def atualizar(self, item_id: int, dados: ItemUpdate) -> Item:
-        atual = self.buscar(item_id)
-        item = atual.model_copy(update=dados.model_dump(exclude_unset=True))
-        self._itens[item_id] = item
+        item = self.buscar(item_id)
+        campos = dados.model_dump(exclude_unset=True)
+        if "name" in campos:
+            self._exigir_nome_livre(campos["name"], item.id)
 
-        return item
+        return self._repositorio.atualizar(item, campos)
 
     def remover(self, item_id: int) -> None:
-        self.buscar(item_id)
-        del self._itens[item_id]
+        self._repositorio.remover(self.buscar(item_id))
 
-    def limpar(self) -> None:
-        self._itens.clear()
-        self._proximo_id = 1
-
-
-item_service = ItemService()
+    def _exigir_nome_livre(self, name: str, item_id: int | None = None) -> None:
+        ocupado = self._repositorio.buscar_por_nome(name)
+        if ocupado is not None and ocupado.id != item_id:
+            raise ItemJaExiste(name)

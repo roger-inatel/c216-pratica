@@ -1,6 +1,8 @@
 import pytest
 from fastapi import status
 
+from app.models.item import Item
+
 
 def criar_item(client, **dados):
     resposta = client.post("/items", json={"name": "teclado", **dados})
@@ -97,3 +99,45 @@ def test_item_inexistente_retorna_404(client, metodo, corpo):
 
     assert resposta.status_code == status.HTTP_404_NOT_FOUND
     assert "detail" in resposta.json()
+
+
+def test_post_com_nome_ja_usado_retorna_409(client):
+    criar_item(client, name="teclado")
+
+    resposta = client.post("/items", json={"name": "teclado"})
+
+    assert resposta.status_code == status.HTTP_409_CONFLICT
+    assert "detail" in resposta.json()
+
+
+def test_patch_para_nome_de_outro_item_retorna_409(client):
+    criar_item(client, name="teclado")
+    item = criar_item(client, name="monitor")
+
+    resposta = client.patch(f"/items/{item['id']}", json={"name": "teclado"})
+
+    assert resposta.status_code == status.HTTP_409_CONFLICT
+
+
+def test_patch_com_nome_nulo_retorna_422(client):
+    item = criar_item(client, name="teclado")
+
+    resposta = client.patch(f"/items/{item['id']}", json={"name": None})
+
+    assert resposta.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+def test_item_criado_fica_gravado_no_banco(client, sessao):
+    criado = criar_item(client, name="teclado", description="mecanico")
+
+    gravado = sessao.get(Item, criado["id"])
+
+    assert (gravado.name, gravado.description) == ("teclado", "mecanico")
+
+
+def test_item_removido_sai_do_banco(client, sessao):
+    item = criar_item(client, name="teclado")
+
+    client.delete(f"/items/{item['id']}")
+
+    assert sessao.get(Item, item["id"]) is None

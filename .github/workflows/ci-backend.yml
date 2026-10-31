@@ -47,6 +47,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
+    # Sem TEST_DATABASE_URL a suite roda em SQLite na memoria. Aqui ela roda contra
+    # a mesma versao do Postgres que o Compose usa.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: c216
+          POSTGRES_PASSWORD: c216
+          POSTGRES_DB: c216
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U c216 -d c216"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://c216:c216@localhost:5432/c216
+
     defaults:
       run:
         working-directory: backend
@@ -72,6 +92,7 @@ jobs:
         run: |
           poetry --version
           poetry run python --version
+          poetry run python -c "import sqlalchemy; print(sqlalchemy.create_engine('$TEST_DATABASE_URL').dialect.name)"
 
       - name: Executar Pytest
         run: poetry run pytest -v
