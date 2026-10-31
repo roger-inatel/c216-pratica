@@ -5,10 +5,12 @@ Repositorio das praticas da disciplina C216 - Sistemas Distribuidos (Inatel).
 ## Estrutura
 
 - `backend/` - API em FastAPI, gerenciada pelo Poetry
+- `frontend/` - interface em React com Vite e Tailwind, gerenciada pelo npm
 - `docker-compose.yml` - sobe a API junto com o banco de dados
 - `Makefile` - centraliza os comandos do projeto
 - `.env.example` - modelo das variaveis de ambiente; o compose tem padrao para todas, entao o projeto sobe sem `.env`
 - `.github/workflows/ci-backend.yml` - CI do backend (testes e lint)
+- `.github/workflows/ci-frontend.yml` - CI do frontend (Biome, Vitest, build e Playwright)
 
 ## Pre-requisitos
 
@@ -16,6 +18,7 @@ Repositorio das praticas da disciplina C216 - Sistemas Distribuidos (Inatel).
 - `poetry` - gerencia as dependencias do backend
 - `python` 3.11 ou superior - exigido pelo `pyproject.toml` e usado por `make help` e `make clean`
 - `docker` com o plugin `compose` - apenas para os comandos de container
+- `node` 22 ou superior, com `npm` - apenas para os comandos do frontend
 
 Se alguma ferramenta estiver instalada com outro nome, sobrescreva a variavel em vez de
 editar o Makefile:
@@ -34,6 +37,17 @@ make docker-up   # sobe a API e o banco em containers
 ```
 
 Detalhes do backend em [backend/README.md](backend/README.md).
+
+## Frontend
+
+```bash
+make frontend-install   # instala as dependencias do frontend
+make frontend-dev       # abre a interface em http://localhost:5173
+```
+
+Por enquanto a interface guarda os itens so na memoria do navegador e nao conversa com a API.
+O frontend ainda nao tem container: roda direto com o Node. Comandos, estrutura e testes em
+[frontend/README.md](frontend/README.md).
 
 ## API
 
@@ -85,14 +99,18 @@ Docker so instala as dependencias de producao. A organizacao dos testes esta no
 
 O `.github/workflows/ci-backend.yml` roda em todo push e pull request, com dois jobs:
 `Pytest`, que sobe um PostgreSQL e executa a suite contra ele, e `Ruff (Lint & Format)`.
-O merge em `aulas` e `main` exige os dois passando e uma aprovacao.
 
-Para rodar localmente o mesmo que o CI:
+O `.github/workflows/ci-frontend.yml` tambem roda em todo push e pull request, com o job
+`Frontend (Biome, Vitest, Build & Playwright)`: confere lint e formatacao, roda o Vitest,
+gera o build e executa os testes E2E no Chromium. Se algum passo falhar, o relatorio do
+Playwright fica disponivel como artefato da execucao.
+
+O merge em `aulas` e `main` exige os tres jobs passando e uma aprovacao.
+
+Para rodar localmente o mesmo que os dois CIs:
 
 ```bash
-make format-check
-make lint
-make test-verbose
+make check-all
 ```
 
 ## Branches
