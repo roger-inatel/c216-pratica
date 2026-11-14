@@ -53,8 +53,11 @@ jobs:
       - name: Instalar o Chromium do Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Executar testes E2E
-        run: npm run test:e2e
+      # Sobe banco, backend e frontend numa pilha separada, roda o Playwright contra
+      # ela e derruba no final; se falhar, o proprio alvo mostra os logs dos containers.
+      - name: Executar testes E2E contra a aplicacao no Docker Compose
+        working-directory: .
+        run: make e2e
 
       - name: Publicar relatorio do Playwright
         if: failure()
