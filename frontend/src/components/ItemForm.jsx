@@ -1,20 +1,39 @@
 import { useState } from "react";
 import { validateItem } from "../validation";
 
-export function ItemForm({ onAdd, existingNames = [] }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [errors, setErrors] = useState({});
+const VAZIO = { name: "", description: "" };
 
-  function handleSubmit(event) {
+export function ItemForm({
+  onSubmit,
+  initialValues = VAZIO,
+  submitLabel = "Adicionar",
+  onCancel,
+}) {
+  const [name, setName] = useState(initialValues.name);
+  const [description, setDescription] = useState(
+    initialValues.description ?? "",
+  );
+  const [errors, setErrors] = useState({});
+  const [serverError, setServerError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(event) {
     event.preventDefault();
-    const result = validateItem({ name, description }, existingNames);
+    const result = validateItem({ name, description });
     setErrors(result.errors);
+    setServerError("");
     if (Object.keys(result.errors).length > 0) return;
 
-    onAdd(result.values);
-    setName("");
-    setDescription("");
+    setSaving(true);
+    try {
+      await onSubmit(result.values);
+      setName("");
+      setDescription("");
+    } catch (error) {
+      setServerError(error.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -68,12 +87,34 @@ export function ItemForm({ onAdd, existingNames = [] }) {
         )}
       </div>
 
-      <button
-        type="submit"
-        className="w-full rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 sm:w-auto"
-      >
-        Adicionar
-      </button>
+      {serverError && (
+        <p
+          role="alert"
+          className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700"
+        >
+          {serverError}
+        </p>
+      )}
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {saving ? "Salvando..." : submitLabel}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded border border-slate-300 px-4 py-2 font-medium hover:bg-slate-100 disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+        )}
+      </div>
     </form>
   );
 }
