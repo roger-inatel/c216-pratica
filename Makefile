@@ -23,7 +23,10 @@ POSTGRES_DB ?= c216
 .PHONY: help install run test test-verbose test-unit test-integration \
         lint format format-check clean \
         docker-build docker-up docker-down docker-logs docker-ps \
-        docker-shell docker-rebuild \n        db-shell db-upgrade db-downgrade db-current db-history db-migration \n        frontend-install frontend-dev frontend-lint frontend-format frontend-check \n        frontend-test frontend-test-e2e frontend-build check-all
+        docker-shell docker-rebuild up-build ps down \
+        db-shell db-upgrade db-downgrade db-current db-history db-migration \
+        frontend-install frontend-dev frontend-lint frontend-format frontend-check \
+        frontend-test frontend-test-e2e frontend-build e2e check-all
 
 # O texto vai para o ambiente e e impresso pelo Python. Com @echo, o cmd.exe
 # imprime as aspas junto, e sem aspas o shell POSIX come a indentacao - o
@@ -46,12 +49,15 @@ Testes (pytest):
 
 Containers (Docker Compose):
   make docker-build     - constroi a imagem do backend
-  make docker-up        - sobe backend e banco em segundo plano
+  make docker-up        - sobe banco, backend e frontend em segundo plano
   make docker-down      - derruba os servicos e remove a rede
   make docker-logs      - acompanha os logs do backend em tempo real
   make docker-ps        - mostra o status dos servicos
   make docker-shell     - abre um shell dentro do container do backend
   make docker-rebuild   - reconstroi as imagens do zero e sobe de novo
+  make up-build         - reconstroi o que mudou e sobe, esperando ficar tudo healthy
+  make ps               - o mesmo que docker-ps
+  make down             - o mesmo que docker-down
 
 Banco de dados (Alembic, com os containers no ar):
   make db-shell         - abre o psql no banco de dados
@@ -68,11 +74,12 @@ Frontend (npm, a partir da raiz):
   make frontend-format   - formata o codigo com o Biome
   make frontend-check    - lint, formatacao e imports sem alterar arquivos
   make frontend-test     - roda os testes unitarios e de integracao (Vitest)
-  make frontend-test-e2e - roda os testes E2E no navegador (Playwright)
+  make frontend-test-e2e - roda os testes E2E contra a aplicacao ja no ar (Playwright)
   make frontend-build    - gera o build de producao em frontend/dist
 
 Tudo junto:
-  make check-all        - roda lint, formatacao, testes e build do backend e do frontend
+  make e2e              - sobe uma pilha separada, roda os testes E2E e derruba tudo
+  make check-all        - roda lint, formatacao, testes, build e E2E de tudo num comando so
 endef
 export TEXTO_AJUDA
 
@@ -136,6 +143,14 @@ docker-rebuild:
 	$(COMPOSE) build --no-cache
 	$(COMPOSE) up -d
 
+# Nomes usados no checklist da Pratica 7.
+up-build:
+	$(COMPOSE) up -d --build --wait
+
+ps: docker-ps
+
+down: docker-down
+
 db-shell:
 	$(COMPOSE) exec $(DB_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
@@ -160,27 +175,50 @@ db-migration:
 	$(COMPOSE) cp $(BACKEND_SERVICE):/app/alembic/versions/. ./$(BACKEND_DIR)/alembic/versions
 
 frontend-install:
-	$(NPM) --prefix $(FRONTEND_DIR) ci
+	cd $(FRONTEND_DIR) && $(NPM) ci
 
 frontend-dev:
-	$(NPM) --prefix $(FRONTEND_DIR) run dev
+	cd $(FRONTEND_DIR) && $(NPM) run dev
 
 frontend-lint:
-	$(NPM) --prefix $(FRONTEND_DIR) run lint
+	cd $(FRONTEND_DIR) && $(NPM) run lint
 
 frontend-format:
-	$(NPM) --prefix $(FRONTEND_DIR) run format
+	cd $(FRONTEND_DIR) && $(NPM) run format
 
 frontend-check:
-	$(NPM) --prefix $(FRONTEND_DIR) run check
+	cd $(FRONTEND_DIR) && $(NPM) run check
 
 frontend-test:
-	$(NPM) --prefix $(FRONTEND_DIR) run test
+	cd $(FRONTEND_DIR) && $(NPM) run test
 
 frontend-test-e2e:
-	$(NPM) --prefix $(FRONTEND_DIR) run test:e2e
+	cd $(FRONTEND_DIR) && $(NPM) run test:e2e
 
 frontend-build:
-	$(NPM) --prefix $(FRONTEND_DIR) run build
+	cd $(FRONTEND_DIR) && $(NPM) run build
 
-check-all: lint format-check test frontend-check frontend-test frontend-build frontend-test-e2e
+# O E2E sobe uma pilha propria (outro projeto, outras portas e banco zerado) e a
+# derruba no final, mesmo quando o teste falha. A pilha do make docker-up fica intacta.
+E2E_STACK := c216-e2e
+E2E_FRONTEND_PORT := 5174
+E2E_BACKEND_PORT := 8001
+E2E_POSTGRES_PORT := 55432
+COMPOSE_E2E = $(COMPOSE) -p $(E2E_STACK)
+
+e2e: export STACK_NAME := $(E2E_STACK)
+e2e: export FRONTEND_PORT := $(E2E_FRONTEND_PORT)
+e2e: export BACKEND_PORT := $(E2E_BACKEND_PORT)
+e2e: export POSTGRES_PORT := $(E2E_POSTGRES_PORT)
+e2e: export VITE_API_URL := http://localhost:$(E2E_BACKEND_PORT)
+e2e: export CORS_ORIGINS := http://localhost:$(E2E_FRONTEND_PORT),http://127.0.0.1:$(E2E_FRONTEND_PORT)
+e2e: export E2E_BASE_URL := http://localhost:$(E2E_FRONTEND_PORT)
+e2e: export E2E_API_URL := http://localhost:$(E2E_BACKEND_PORT)
+
+# --wait so devolve o controle quando os tres containers estao healthy.
+e2e:
+	$(COMPOSE_E2E) up -d --build --wait || ($(COMPOSE_E2E) logs --no-color && $(COMPOSE_E2E) down -v && exit 1)
+	$(MAKE) frontend-test-e2e || ($(COMPOSE_E2E) logs --no-color --tail=50 && $(COMPOSE_E2E) down -v && exit 1)
+	$(COMPOSE_E2E) down -v
+
+check-all: lint format-check test frontend-check frontend-test frontend-build e2e

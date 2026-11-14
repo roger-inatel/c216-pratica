@@ -3,7 +3,8 @@ name: c216-pratica
 services:
   db:
     image: postgres:16-alpine
-    container_name: c216-db
+    # STACK_NAME so muda no make e2e, que sobe uma pilha separada para os testes.
+    container_name: ${STACK_NAME:-c216}-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-c216}
@@ -26,12 +27,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: c216-backend
+    container_name: ${STACK_NAME:-c216}-backend
     restart: unless-stopped
     environment:
       # Dentro da rede do Compose o banco responde pelo nome do servico;
       # "localhost" aqui seria o proprio container do backend.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-c216}:${POSTGRES_PASSWORD:-c216}@db:5432/${POSTGRES_DB:-c216}
+      # Endereco do frontend como o navegador enxerga. Se mudar FRONTEND_PORT, mude aqui.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     # Só sobe depois que o Postgres responde ao pg_isready, e nao apenas
     # depois que o container do banco existe.
     depends_on:
@@ -48,6 +51,30 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - c216-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Quem chama a API e o navegador, fora da rede do Compose: por isso a URL
+        # usa a porta publicada no host, e nao o nome do servico "backend".
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: ${STACK_NAME:-c216}-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - c216-net
 

@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { ItemForm } from "../../src/components/ItemForm";
 
 describe("ItemForm", () => {
-  it("mostra erro e não chama onAdd com nome vazio", async () => {
+  it("mostra erro e não chama onSubmit com nome vazio", async () => {
     const user = userEvent.setup();
-    const onAdd = vi.fn();
-    render(<ItemForm onAdd={onAdd} />);
+    const onSubmit = vi.fn();
+    render(<ItemForm onSubmit={onSubmit} />);
 
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
@@ -18,49 +18,81 @@ describe("ItemForm", () => {
       "aria-invalid",
       "true",
     );
-    expect(onAdd).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("chama onAdd com os valores sem espaços nas pontas", async () => {
+  it("envia os valores sem espaços nas pontas e limpa os campos", async () => {
     const user = userEvent.setup();
-    const onAdd = vi.fn();
-    render(<ItemForm onAdd={onAdd} />);
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<ItemForm onSubmit={onSubmit} />);
 
     await user.type(screen.getByLabelText("Nome"), "  Notebook ");
     await user.type(screen.getByLabelText("Descrição"), "14 polegadas ");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
-    expect(onAdd).toHaveBeenCalledOnce();
-    expect(onAdd).toHaveBeenCalledWith({
+    expect(onSubmit).toHaveBeenCalledWith({
       name: "Notebook",
       description: "14 polegadas",
     });
-  });
-
-  it("limpa os campos depois de um envio válido", async () => {
-    const user = userEvent.setup();
-    render(<ItemForm onAdd={vi.fn()} />);
-
-    await user.type(screen.getByLabelText("Nome"), "Mouse");
-    await user.type(screen.getByLabelText("Descrição"), "Sem fio");
-    await user.click(screen.getByRole("button", { name: "Adicionar" }));
-
     expect(screen.getByLabelText("Nome")).toHaveValue("");
     expect(screen.getByLabelText("Descrição")).toHaveValue("");
   });
 
-  it("não chama onAdd com nome que já existe", async () => {
+  it("mostra o erro da API e mantém o que foi digitado", async () => {
     const user = userEvent.setup();
-    const onAdd = vi.fn();
-    render(<ItemForm onAdd={onAdd} existingNames={["Mouse"]} />);
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(new Error("Ja existe um item com o nome Mouse"));
+    render(<ItemForm onSubmit={onSubmit} />);
 
     await user.type(screen.getByLabelText("Nome"), "Mouse");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Já existe um item com esse nome.",
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ja existe um item com o nome Mouse",
     );
     expect(screen.getByLabelText("Nome")).toHaveValue("Mouse");
-    expect(onAdd).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Adicionar" })).toBeEnabled();
+  });
+
+  it("desabilita o botão enquanto salva", async () => {
+    const user = userEvent.setup();
+    let concluir;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          concluir = resolve;
+        }),
+    );
+    render(<ItemForm onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText("Nome"), "Mouse");
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    expect(screen.getByRole("button", { name: "Salvando..." })).toBeDisabled();
+    concluir();
+    expect(
+      await screen.findByRole("button", { name: "Adicionar" }),
+    ).toBeEnabled();
+  });
+
+  it("no modo edição começa preenchido e permite cancelar", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(
+      <ItemForm
+        onSubmit={vi.fn()}
+        initialValues={{ id: 1, name: "Mouse", description: null }}
+        submitLabel="Salvar alterações"
+        onCancel={onCancel}
+      />,
+    );
+
+    expect(screen.getByLabelText("Nome")).toHaveValue("Mouse");
+    expect(screen.getByLabelText("Descrição")).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });

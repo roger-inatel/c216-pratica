@@ -6,7 +6,7 @@ Repositorio das praticas da disciplina C216 - Sistemas Distribuidos (Inatel).
 
 - `backend/` - API em FastAPI, gerenciada pelo Poetry
 - `frontend/` - interface em React com Vite e Tailwind, gerenciada pelo npm
-- `docker-compose.yml` - sobe a API junto com o banco de dados
+- `docker-compose.yml` - sobe o banco, a API e o frontend
 - `Makefile` - centraliza os comandos do projeto
 - `.env.example` - modelo das variaveis de ambiente; o compose tem padrao para todas, entao o projeto sobe sem `.env`
 - `.github/workflows/ci-backend.yml` - CI do backend (testes e lint)
@@ -33,21 +33,40 @@ make clean PYTHON=python3
 ```bash
 make help        # lista todos os comandos disponiveis
 make install     # instala as dependencias do backend
-make docker-up   # sobe a API e o banco em containers
+make docker-up   # sobe banco, API e frontend em containers
+make up-build    # reconstroi o que mudou, sobe e espera tudo ficar healthy
+make ps          # status dos tres servicos
+make down        # derruba os tres servicos
 ```
 
-Detalhes do backend em [backend/README.md](backend/README.md).
+Com os containers no ar:
+
+- interface: `http://localhost:5173`
+- API: `http://localhost:8000` (documentacao em `/docs`)
+
+Os servicos sobem em ordem: o backend espera o banco ficar healthy, e o frontend espera o
+backend. Detalhes do backend em [backend/README.md](backend/README.md).
 
 ## Frontend
 
+O frontend consome a API: listar, cadastrar, editar e excluir passam pelo backend e ficam
+gravados no PostgreSQL. No container, o build do Vite e servido pelo nginx na porta 5173.
+
+Duas variaveis ligam os dois lados (valores padrao no `.env.example`):
+
+- `VITE_API_URL` - endereco da API que o navegador chama. Entra no build da imagem, entao
+  depois de mudar e preciso `make docker-rebuild`;
+- `CORS_ORIGINS` - origens que o backend aceita, separadas por virgula. E uma lista explicita,
+  sem `*`; se mudar `FRONTEND_PORT`, ajuste aqui tambem.
+
+Para desenvolver sem container, com o backend no ar:
+
 ```bash
-make frontend-install   # instala as dependencias do frontend
-make frontend-dev       # abre a interface em http://localhost:5173
+make frontend-install
+make frontend-dev       # http://localhost:5173
 ```
 
-Por enquanto a interface guarda os itens so na memoria do navegador e nao conversa com a API.
-O frontend ainda nao tem container: roda direto com o Node. Comandos, estrutura e testes em
-[frontend/README.md](frontend/README.md).
+Comandos, estrutura, tratamento de erros e testes em [frontend/README.md](frontend/README.md).
 
 ## API
 
@@ -101,17 +120,27 @@ O `.github/workflows/ci-backend.yml` roda em todo push e pull request, com dois 
 `Pytest`, que sobe um PostgreSQL e executa a suite contra ele, e `Ruff (Lint & Format)`.
 
 O `.github/workflows/ci-frontend.yml` tambem roda em todo push e pull request, com o job
-`Frontend (Biome, Vitest, Build & Playwright)`: confere lint e formatacao, roda o Vitest,
-gera o build e executa os testes E2E no Chromium. Se algum passo falhar, o relatorio do
-Playwright fica disponivel como artefato da execucao.
+`Frontend (Biome, Vitest, Build & Playwright)`: confere lint e formatacao, roda o Vitest e
+gera o build. Depois roda `make e2e`, que sobe a aplicacao inteira com `docker compose` e
+executa os testes E2E no Chromium contra ela. Se algum passo falhar, os logs dos containers
+aparecem no job e o relatorio do Playwright fica disponivel como artefato da execucao.
 
 O merge em `aulas` e `main` exige os tres jobs passando e uma aprovacao.
 
-Para rodar localmente o mesmo que os dois CIs:
+Para rodar localmente tudo o que os dois CIs rodam, num comando so:
 
 ```bash
 make check-all
 ```
+
+Ele roda Ruff e Pytest no backend, Biome, Vitest e build no frontend, e termina com o
+`make e2e`.
+
+O `make e2e` nao usa os containers do `make docker-up`. Ele sobe uma pilha separada, o projeto
+`c216-e2e`, nas portas 5174 (frontend), 8001 (API) e 55432 (banco), com banco zerado. Roda o
+Playwright contra ela e derruba tudo no final, volume incluido, mesmo quando um teste falha.
+Assim os testes nao mexem nos dados de quem esta usando a aplicacao, e nao sobra container
+`c216-e2e` depois.
 
 ## Branches
 
