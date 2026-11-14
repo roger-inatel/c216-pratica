@@ -49,6 +49,16 @@ com o banco. A sessao chega aos endpoints pela dependencia `get_db`, uma por req
 
 O endereco do banco vem da variavel `DATABASE_URL`, lida em `core/config.py`.
 
+## CORS
+
+O frontend roda em outra origem (porta 5173), entao o navegador so deixa ele ler as respostas
+da API se o backend autorizar. O `CORSMiddleware` em `main.py` aceita apenas as origens da
+variavel `CORS_ORIGINS`, separadas por virgula (padrao `http://localhost:5173` e
+`http://127.0.0.1:5173`), os metodos `GET`, `POST`, `PUT`, `PATCH` e `DELETE` e o cabecalho
+`Content-Type`. Nao ha `*`: uma origem fora da lista recebe `400` no preflight.
+
+O CORS e uma regra do navegador. `curl` e o `TestClient` nao sao bloqueados por ele.
+
 ## Execucao local
 
 A partir da raiz do repositorio:
@@ -65,7 +75,7 @@ make lint      # verifica o codigo com o ruff
 Tambem a partir da raiz:
 
 ```bash
-make docker-up     # sobe a API e o banco
+make docker-up     # sobe o banco, a API e o frontend
 make docker-ps     # mostra o status dos servicos
 make docker-down   # derruba tudo
 ```
@@ -93,7 +103,9 @@ A documentacao interativa fica em `http://localhost:8000/docs`.
 
 - `tests/unit/test_item_service.py` - regra de negocio do service, sobre um repositorio falso
 - `tests/unit/test_app.py` - contrato da aplicacao: rotas e metodos declarados
+- `tests/unit/test_config.py` - leitura da lista de origens do CORS
 - `tests/integration/test_items_api.py` - os seis endpoints de itens pelo `TestClient`
+- `tests/integration/test_cors.py` - preflight da origem do frontend, origem desconhecida recusada e nada de `*`
 - `tests/integration/test_system_api.py` - `/`, `/health`, `/docs` e os erros 404 e 405
 - `tests/conftest.py` - escolhe o banco de teste, cria e derruba as tabelas a cada teste e
   substitui a dependencia `get_db` da aplicacao
