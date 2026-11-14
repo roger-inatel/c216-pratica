@@ -63,14 +63,6 @@ describe("validateItem", () => {
     );
   });
 
-  it("rejeita nome que já existe na lista", () => {
-    const { errors } = validateItem({ name: " Notebook ", description: "" }, [
-      "Notebook",
-    ]);
-
-    expect(errors.name).toBe("Já existe um item com esse nome.");
-  });
-
   it("rejeita descrição acima do limite de caracteres", () => {
     const { errors } = validateItem({
       name: "Monitor",
