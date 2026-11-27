@@ -1,4 +1,5 @@
 BACKEND_DIR := backend
+FRONTEND_DIR := frontend
 UVICORN_HOST := 0.0.0.0
 UVICORN_PORT := 8000
 
@@ -7,6 +8,7 @@ UVICORN_PORT := 8000
 POETRY ?= poetry
 COMPOSE ?= docker compose
 PYTHON ?= python
+NPM ?= npm
 
 BACKEND_SERVICE := backend
 DB_SERVICE := db
@@ -22,7 +24,9 @@ POSTGRES_DB ?= entregas
         lint format format-check clean \
         docker-build docker-up docker-down docker-logs docker-ps \
         docker-shell docker-rebuild up-build ps down \
-        db-shell db-upgrade db-downgrade db-current db-history db-migration check-all
+        db-shell db-upgrade db-downgrade db-current db-history db-migration \
+        frontend-install frontend-dev frontend-lint frontend-format frontend-check \
+        frontend-test frontend-test-e2e frontend-build e2e check-all
 
 # O texto vai para o ambiente e e impresso pelo Python. Com @echo, o cmd.exe
 # imprime as aspas junto, e sem aspas o shell POSIX come a indentacao - o
@@ -44,8 +48,8 @@ Testes (pytest):
   make test-integration - roda so os testes de integracao (TestClient)
 
 Containers (Docker Compose):
-  make docker-build     - constroi a imagem do backend
-  make docker-up        - sobe banco e backend em segundo plano
+  make docker-build     - constroi as imagens do backend e do frontend
+  make docker-up        - sobe banco, backend e frontend em segundo plano
   make docker-down      - derruba os servicos e remove a rede
   make docker-logs      - acompanha os logs do backend em tempo real
   make docker-ps        - mostra o status dos servicos
@@ -63,8 +67,19 @@ Banco de dados (Alembic, com os containers no ar):
   make db-history       - lista o historico de migrations
   make db-migration MSG="descricao" - gera uma migration a partir dos modelos
 
+Frontend (npm, a partir da raiz):
+  make frontend-install  - instala as dependencias do frontend (npm ci)
+  make frontend-dev      - inicia o frontend em modo dev (Vite, porta 5173)
+  make frontend-lint     - verifica o codigo com o Biome
+  make frontend-format   - formata o codigo com o Biome
+  make frontend-check    - lint, formatacao e imports sem alterar arquivos
+  make frontend-test     - roda os testes unitarios e de integracao (Vitest)
+  make frontend-test-e2e - roda os testes E2E contra a aplicacao ja no ar (Playwright)
+  make frontend-build    - gera o build de producao em frontend/dist
+
 Tudo junto:
-  make check-all        - roda lint, formatacao e testes
+  make e2e              - sobe uma pilha separada, roda os testes E2E e derruba tudo
+  make check-all        - roda lint, formatacao, testes, build e E2E de tudo num comando so
 endef
 export TEXTO_AJUDA
 
@@ -159,4 +174,50 @@ db-migration:
 	$(COMPOSE) exec $(BACKEND_SERVICE) alembic revision --autogenerate -m "$(MSG)"
 	$(COMPOSE) cp $(BACKEND_SERVICE):/app/alembic/versions/. ./$(BACKEND_DIR)/alembic/versions
 
-check-all: lint format-check test
+frontend-install:
+	cd $(FRONTEND_DIR) && $(NPM) ci
+
+frontend-dev:
+	cd $(FRONTEND_DIR) && $(NPM) run dev
+
+frontend-lint:
+	cd $(FRONTEND_DIR) && $(NPM) run lint
+
+frontend-format:
+	cd $(FRONTEND_DIR) && $(NPM) run format
+
+frontend-check:
+	cd $(FRONTEND_DIR) && $(NPM) run check
+
+frontend-test:
+	cd $(FRONTEND_DIR) && $(NPM) run test
+
+frontend-test-e2e:
+	cd $(FRONTEND_DIR) && $(NPM) run test:e2e
+
+frontend-build:
+	cd $(FRONTEND_DIR) && $(NPM) run build
+
+# O E2E sobe uma pilha propria (outro projeto, outras portas e banco zerado) e a
+# derruba no final, mesmo quando o teste falha. A pilha do make docker-up fica intacta.
+E2E_STACK := entregas-e2e
+E2E_FRONTEND_PORT := 5174
+E2E_BACKEND_PORT := 8001
+E2E_POSTGRES_PORT := 55432
+COMPOSE_E2E = $(COMPOSE) -p $(E2E_STACK)
+
+e2e: export STACK_NAME := $(E2E_STACK)
+e2e: export FRONTEND_PORT := $(E2E_FRONTEND_PORT)
+e2e: export BACKEND_PORT := $(E2E_BACKEND_PORT)
+e2e: export POSTGRES_PORT := $(E2E_POSTGRES_PORT)
+e2e: export VITE_API_URL := http://localhost:$(E2E_BACKEND_PORT)
+e2e: export CORS_ORIGINS := http://localhost:$(E2E_FRONTEND_PORT),http://127.0.0.1:$(E2E_FRONTEND_PORT)
+e2e: export E2E_BASE_URL := http://localhost:$(E2E_FRONTEND_PORT)
+
+# --wait so devolve o controle quando os tres containers estao healthy.
+e2e:
+	$(COMPOSE_E2E) up -d --build --wait || ($(COMPOSE_E2E) logs --no-color && $(COMPOSE_E2E) down -v && exit 1)
+	$(MAKE) frontend-test-e2e || ($(COMPOSE_E2E) logs --no-color --tail=50 && $(COMPOSE_E2E) down -v && exit 1)
+	$(COMPOSE_E2E) down -v
+
+check-all: lint format-check test frontend-check frontend-test frontend-build e2e
