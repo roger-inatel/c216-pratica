@@ -48,6 +48,29 @@ services:
     networks:
       - entregas-net
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Quem chama a API e o navegador, fora da rede do Compose: a URL usa a
+        # porta publicada no host, e nao o nome do servico "backend".
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: ${STACK_NAME:-entregas}-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - entregas-net
+
 volumes:
   pgdata:
 
