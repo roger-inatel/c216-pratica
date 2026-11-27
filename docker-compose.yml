@@ -1,0 +1,56 @@
+name: entregas
+
+services:
+  db:
+    image: postgres:16-alpine
+    # STACK_NAME so muda no make e2e, que sobe uma pilha separada para os testes.
+    container_name: ${STACK_NAME:-entregas}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-entregas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-entregas}
+      POSTGRES_DB: ${POSTGRES_DB:-entregas}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-entregas} -d ${POSTGRES_DB:-entregas}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - entregas-net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ${STACK_NAME:-entregas}-backend
+    restart: unless-stopped
+    environment:
+      # Dentro da rede do Compose o banco e encontrado pelo nome do servico, "db".
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-entregas}:${POSTGRES_PASSWORD:-entregas}@db:5432/${POSTGRES_DB:-entregas}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    depends_on:
+      db:
+        condition: service_healthy
+    # As migrations rodam antes do servidor subir, entao a API ja encontra as tabelas.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - entregas-net
+
+volumes:
+  pgdata:
+
+networks:
+  entregas-net:
+    driver: bridge

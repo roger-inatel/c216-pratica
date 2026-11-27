@@ -13,3 +13,9 @@ build/
 
 .DS_Store
 Thumbs.db
+
+# Variaveis de ambiente locais
+.env
+
+# Frontend
+node_modules/
