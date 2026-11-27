@@ -1,0 +1,162 @@
+BACKEND_DIR := backend
+UVICORN_HOST := 0.0.0.0
+UVICORN_PORT := 8000
+
+# Ferramentas externas, declaradas com ?= para poderem ser sobrescritas sem editar
+# este arquivo. Exemplo: make install POETRY="python -m poetry"
+POETRY ?= poetry
+COMPOSE ?= docker compose
+PYTHON ?= python
+
+BACKEND_SERVICE := backend
+DB_SERVICE := db
+
+# Credenciais do banco, com os mesmos padroes do docker-compose.yml. Sao variaveis
+# do make, e nao expansao de shell: "${VAR:-padrao}" so existe em shells POSIX e
+# chegava literal ao psql quando o make rodava pelo cmd.exe. Com ?= o ambiente
+# ainda sobrescreve: POSTGRES_USER=outro make db-shell.
+POSTGRES_USER ?= entregas
+POSTGRES_DB ?= entregas
+
+.PHONY: help install run test test-verbose test-unit test-integration \
+        lint format format-check clean \
+        docker-build docker-up docker-down docker-logs docker-ps \
+        docker-shell docker-rebuild up-build ps down \
+        db-shell db-upgrade db-downgrade db-current db-history db-migration check-all
+
+# O texto vai para o ambiente e e impresso pelo Python. Com @echo, o cmd.exe
+# imprime as aspas junto, e sem aspas o shell POSIX come a indentacao - o
+# define preserva o texto exato nos dois.
+define TEXTO_AJUDA
+Ambiente local (Poetry):
+  make help             - lista os comandos disponiveis
+  make install          - instala as dependencias do backend com Poetry
+  make run              - inicia o servidor FastAPI (uvicorn) em modo dev
+  make lint             - verifica o codigo com o linter
+  make format           - formata o codigo automaticamente
+  make format-check     - confere a formatacao sem alterar arquivos (como no CI)
+  make clean            - remove caches e arquivos temporarios
+
+Testes (pytest):
+  make test             - roda todos os testes
+  make test-verbose     - roda todos os testes, listando cada um
+  make test-unit        - roda so os testes unitarios (sem HTTP)
+  make test-integration - roda so os testes de integracao (TestClient)
+
+Containers (Docker Compose):
+  make docker-build     - constroi a imagem do backend
+  make docker-up        - sobe banco e backend em segundo plano
+  make docker-down      - derruba os servicos e remove a rede
+  make docker-logs      - acompanha os logs do backend em tempo real
+  make docker-ps        - mostra o status dos servicos
+  make docker-shell     - abre um shell dentro do container do backend
+  make docker-rebuild   - reconstroi as imagens do zero e sobe de novo
+  make up-build         - reconstroi o que mudou e sobe, esperando ficar tudo healthy
+  make ps               - o mesmo que docker-ps
+  make down             - o mesmo que docker-down
+
+Banco de dados (Alembic, com os containers no ar):
+  make db-shell         - abre o psql no banco de dados
+  make db-upgrade       - aplica as migrations pendentes
+  make db-downgrade     - desfaz a ultima migration
+  make db-current       - mostra a revisao aplicada no banco
+  make db-history       - lista o historico de migrations
+  make db-migration MSG="descricao" - gera uma migration a partir dos modelos
+
+Tudo junto:
+  make check-all        - roda lint, formatacao e testes
+endef
+export TEXTO_AJUDA
+
+help:
+	@$(PYTHON) -c "import os; print(os.environ['TEXTO_AJUDA'])"
+
+install:
+	cd $(BACKEND_DIR) && $(POETRY) install
+
+run:
+	cd $(BACKEND_DIR) && $(POETRY) run uvicorn app.main:app --reload --host $(UVICORN_HOST) --port $(UVICORN_PORT)
+
+test:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest
+
+test-verbose:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest -v
+
+test-unit:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest tests/unit
+
+test-integration:
+	cd $(BACKEND_DIR) && $(POETRY) run pytest tests/integration
+
+lint:
+	cd $(BACKEND_DIR) && $(POETRY) run ruff check .
+
+format:
+	cd $(BACKEND_DIR) && $(POETRY) run ruff format .
+
+format-check:
+	cd $(BACKEND_DIR) && $(POETRY) run ruff format --check .
+
+# O find do Unix nao existe no Windows fora do Git Bash: no cmd.exe o nome resolve
+# para o FIND.EXE do sistema, que busca texto e falha. O Python ja e pre-requisito
+# do projeto e faz o mesmo em qualquer shell. O .venv fica de fora de proposito.
+clean:
+	@$(PYTHON) -c "import pathlib, shutil; alvos = [d for d in pathlib.Path('.').rglob('*') if d.is_dir() and d.name in ('__pycache__', '.pytest_cache', '.ruff_cache') and '.venv' not in d.parts]; [shutil.rmtree(d, ignore_errors=True) for d in alvos]; print('caches removidos:', len(alvos))"
+
+docker-build:
+	$(COMPOSE) build
+
+docker-up:
+	$(COMPOSE) up -d
+
+docker-down:
+	$(COMPOSE) down
+
+docker-logs:
+	$(COMPOSE) logs -f $(BACKEND_SERVICE)
+
+docker-ps:
+	$(COMPOSE) ps
+
+# Sem barra inicial de proposito: no Git Bash do Windows, "/bin/bash" seria
+# convertido para um caminho do host antes de chegar ao container.
+docker-shell:
+	$(COMPOSE) exec $(BACKEND_SERVICE) bash
+
+docker-rebuild:
+	$(COMPOSE) build --no-cache
+	$(COMPOSE) up -d
+
+# Nomes usados no checklist da Pratica 7.
+up-build:
+	$(COMPOSE) up -d --build --wait
+
+ps: docker-ps
+
+down: docker-down
+
+db-shell:
+	$(COMPOSE) exec $(DB_SERVICE) psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+
+db-upgrade:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic upgrade head
+
+db-downgrade:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic downgrade -1
+
+db-current:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic current
+
+db-history:
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic history
+
+# A migration e gerada dentro do container, que ja aponta para o banco do Compose,
+# e o arquivo criado volta para o repositorio. Rodar o Alembic pelo host exigiria
+# que a porta publicada do Postgres estivesse livre na maquina de quem gera.
+db-migration:
+	@$(PYTHON) -c "import sys; sys.exit('uso: make db-migration MSG=descricao') if not '$(MSG)' else None"
+	$(COMPOSE) exec $(BACKEND_SERVICE) alembic revision --autogenerate -m "$(MSG)"
+	$(COMPOSE) cp $(BACKEND_SERVICE):/app/alembic/versions/. ./$(BACKEND_DIR)/alembic/versions
+
+check-all: lint format-check test
